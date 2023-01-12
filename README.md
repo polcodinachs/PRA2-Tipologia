@@ -8,7 +8,7 @@ Francesc Valls i Pol Codinachs
 Conté el software en R i el dataset utilitzats per al desenvolupament d'aquesta Pràctica 2 de l'assignatura Tipologia i cicle de vida de les dades
 
 ## Dataset
-El dataset ha estat obtingut de la següent publicació a Kaggle:
+El dataset ha estat obtingut de la següent publicació a Kaggle:<br>
 https://www.kaggle.com/datasets/rashikrahmanpritom/heart-attack-analysis-prediction-dataset
 
 ## Llicencia
