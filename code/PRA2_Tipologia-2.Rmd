@@ -1,0 +1,426 @@
+---
+title: "Heart Attack Analysis & Prediction Dataset"
+author: "Francesc Valls i Pol Codinachs"
+subtitle: Pràctica 2 - Tipologia i cicle de vida de les dades
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
+```
+
+```{r include=FALSE}
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+library(readr)
+library(grid)
+library(gridExtra)
+install.packages('lmtest', repos = "http://cran.us.r-project.org")
+library(lmtest)
+library(dplyr)
+
+# https://cran.r-project.org/web/packages/tidyverse/index.html
+if (!require('tidyverse')) install.packages('tidyverse');
+# https://cran.r-project.org/web/packages/ggplot2/index.html
+if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
+# https://cran.r-project.org/web/packages/arules/index.html
+if (!require('arules')) install.packages('arules'); library('arules')
+# https://cran.r-project.org/web/packages/corrplot/index.html
+if (!require('corrplot')) install.packages('corrplot');
+# https://cran.r-project.org/web/packages/factoclass/index.html
+if (!require('FactoClass')) install.packages('FactoClass');
+# https://cran.r-project.org/web/packages/mlbench/index.html
+if (!require('mlbench')) install.packages('mlbench');
+# https://cran.r-project.org/web/packages/caret/index.html
+if (!require('caret')) install.packages('caret');
+# https://cran.r-project.org/web/packages/randomForest/index.html
+if (!require('randomForest')) install.packages('randomForest');
+# https://cran.r-project.org/web/packages/formatR/index.html
+if (!require('formatR')) install.packages('formatR');
+```
+
+# Càrrega de la base de dades que s'utilitza per aquesta pràctica
+
+```{r}
+taula_heart = read.csv("heart.csv")
+```
+
+Verifiquem l'estructura del joc de dades principal on veiem que conté un total de:
+*303 registres
+*14 variables
+
+```{r}
+str(taula_heart)
+```
+
+\newpage
+
+# 1. Descripció del dataset
+
+Aquestes són les variables que conté el dataset:
+
+* Age: Variable numèrica, indica l'edat del pacient.
+* Sex: Variable booleana, indica el sexe del pacient (0 = Dones, 1=Homes)
+* cp: Variable numèrica, indica el tipus de dolor al pit (Chest pain):
+    + Valor 1: angina típica
+    + Valor 2: angina atípica
+    + Valor 3: sense angina
+    + Valor 4: assimptomatic
+* trtbps: Variable numèrica, indica la pressió sanguínia en repòs, en mm de Hg
+* chol: Variable numèrica, indica el colesterol en mg/dl obtingut a través del sensor BMI
+* fbs: Variable booleana, indica si la quantitat de sucre a la sang és > 120 mg/dl:
+    + Valor 0: Fals
+    + Valor 1: Verdader
+* rest_ecg: Variable booleana, indica els resultats electrocardiogràfics en repòs:
+    + Valor 0: Normal
+    + Valor 1: Anomalíes en la corba ST-T
+* thalachh: Variable numèrica, indica la freqüència cardíaca màxima registrada
+* exng: Variable booleana: indica angina induida per l'exercici
+    + Valor 0: No
+    + Valor 1: Si
+* oldpeak: Variable numèrica, indica el "peak" anterior
+* slp: Variable numèrica, 
+* caa: Els vasos que retornen la sang al cor 
+* thall: No explica el significat de la variable en el kaggle
+* output: Variable dicotòmica
+    + valor 0: No ha patit un atac de cor
+    + valor 1: Si ha patit un atac de cor
+
+Amb la descripció del dataset podem observar quines variables poden ser rellevants per realitzar els anàlisis pertinents per veure si tenen sentit analitzar-les per predir les persones que podrien patir un atac de cor.
+
+Declarem les variables que són factors:
+
+```{r}
+taula_heart$sex<- as.factor(taula_heart$sex)
+taula_heart$cp<- as.factor(taula_heart$cp)
+taula_heart$fbs<- as.factor(taula_heart$fbs)
+taula_heart$exng<- as.factor(taula_heart$exng)
+taula_heart$output<- as.factor(taula_heart$output)
+
+summary(taula_heart)
+```
+\newpage
+
+# 2. Integració i selecció
+
+Es crea una nova variable on es discretitza la variable age per trams de 10 anys
+```{r}
+summary(taula_heart[,'age'])
+taula_heart["AgeDisc"] <- cut(taula_heart$age, breaks = c(20,30,40,50,60,70,80), 
+    labels = c("20-29", "30-39", "40-49", "50-59","60-69","70-79"))
+
+table(taula_heart$fbs)
+```
+
+També es modifiquen els noms de les variables per fer-les més entenedores.
+* age->Age
+* sex->Sex
+* cp->ChestPain
+* trtbps->BloodPres
+* chol->Cholesterol
+* fbs->BloodSugar
+* restecg->RestECG
+* thalachh->MaxHR
+* exng->ExAngina
+* oldpeak->OldPeak
+* slp->Slope
+* caa->Vessels
+* thall->Thall
+* output->Output
+
+```{r}
+names(taula_heart)[names(taula_heart) == "age"] <- "Age"
+names(taula_heart)[names(taula_heart) == "sex"] <- "Sex"
+names(taula_heart)[names(taula_heart) == "cp"] <- "ChestPain"
+names(taula_heart)[names(taula_heart) == "trtbps"] <- "BloodPres"
+names(taula_heart)[names(taula_heart) == "chol"] <- "Cholesterol"
+names(taula_heart)[names(taula_heart) == "fbs"] <- "BloodSugar"
+names(taula_heart)[names(taula_heart) == "restecg"] <- "RestECG"
+names(taula_heart)[names(taula_heart) == "thalachh"] <- "MaxHR"
+names(taula_heart)[names(taula_heart) == "exng"] <- "ExAngina"
+names(taula_heart)[names(taula_heart) == "oldpeak"] <- "OldPeak"
+names(taula_heart)[names(taula_heart) == "slp"] <- "Slope"
+names(taula_heart)[names(taula_heart) == "caa"] <- "Vessels"
+names(taula_heart)[names(taula_heart) == "thall"] <- "Thall"
+names(taula_heart)[names(taula_heart) == "output"] <- "HeartAttack"
+```
+
+\newpage
+# 3. Neteja de les dades
+
+## Valors buits
+A continuació, en l'etapa de neteja de les dades es duen a terme una sèrie de processos que permeten identificar aquells registres incomplets, incorrectes, inexactes o no pertinents del nostre joc de dades per tal d'eliminar-los o bé corregir-los. Amb tot això aconseguim millorar la qualitat de les dades.
+
+```{r}
+nas <- sum(is.na(taula_heart))
+paste("Valors NA: ", nas)
+```
+
+## Zeros
+
+Veiem que en aquest dataset no existeixen valors en nuls pel que no cal tractar-los, en el cas que aquests existissin, els podriem tractar de dues maneres diferents:
+
+*Si són pocs els registres blancs o nuls, eliminar-los ja que l'impacte que tindrien sobre el conjunt total seria mínim.
+  
+*En el cas que n'hi hagués un nombre considerable, es podrien emplenar per l'string "Desconegut" aquells atributs del tipus char o per la mitjana de tots els valors de l'atribut aquells que siguin del tipus numèric.
+
+Anem a veure també, d'aquelles variables numèriques (no booleanes ni categòriques) *age*, *trtbps*, *chol*, *thalachh*, quants valors igual a zero tenen.
+
+Observem que cap d'aquestes variables té cap valor igual a zero. 
+
+```{r}
+colSums(taula_heart[c("Age","BloodPres","Cholesterol","MaxHR")]==0)
+```
+
+## Valors extrems
+
+Anem a veure els valors extrems (outliers) que conté el joc de dades.
+Per això, seleccionem les variables numèriques i descartem les booleanes i amb l'ajuda dels boxplots visualitzem la distribució de cada variable. Podem observar que el nombre de valors extrems és molt petit en proporció la quantitat de registres totals i al tractar-se de dades fisiològiques, on cada pacient és un cas totalment diferent, poden considerar-se normals.
+
+```{r}
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60), tidy=TRUE)
+
+taula_heart_age.bp <- ggplot(data=data.frame(taula_heart$Age), aes(x=factor(0), y=taula_heart$Age)) + theme_minimal() + geom_boxplot(fill="Green") + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) + ggtitle("Age") + theme(plot.title = element_text(hjust = 0.5))
+taula_heart_trtbps.bp <- ggplot(data=data.frame(taula_heart$BloodPres), aes(x=factor(0), y=taula_heart$BloodPres)) + theme_minimal() + geom_boxplot(fill="plum4") + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) + ggtitle("Blood Pressure") + theme(plot.title = element_text(hjust = 0.5))
+taula_heart_chol.bp <- ggplot(data=data.frame(taula_heart$Cholesterol), aes(x=factor(0), y=taula_heart$Cholesterol)) + theme_minimal() + geom_boxplot(fill="darkolivegreen4") + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) + ggtitle("Cholesterol") + theme(plot.title = element_text(hjust = 0.5))
+taula_heart_thalachh.bp <- ggplot(data=data.frame(taula_heart$MaxHR), aes(x=factor(0), y=taula_heart$MaxHR)) + theme_minimal() + geom_boxplot(fill="sky blue") + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) + ggtitle("Max Heart Rate") + theme(plot.title = element_text(hjust = 0.5))
+taula_heart_oldpeak.bp <- ggplot(data=data.frame(taula_heart$OldPeak), aes(x=factor(0), y=taula_heart$OldPeak)) + theme_minimal() + geom_boxplot(fill="orange") + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) + ggtitle("Old Peak") + theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(taula_heart_age.bp, taula_heart_trtbps.bp, taula_heart_chol.bp, taula_heart_thalachh.bp, taula_heart_oldpeak.bp, nrow=3, ncol=3)
+```
+\newpage
+
+# 4. Anàlisi de les dades
+
+Amb la funció summary fem un primer anàlisi de les dades:
+
+```{r}
+summary(taula_heart)
+```
+
+
+* El pacient més jove té 29 anys i el més gran 77. És a dir, només s'ha realitzat l'estudi en pacients adult i la mitjana és de 54 anys.
+  
+* S'han registrat un total de 207 pacients homes i 96 pacients dones. Això ens fa pensar que el conjunt de dades no està gent equilibrat i és probable que els resultats finals de predicció de probabilitat de patir malalties cardiovasculars seran més precisos en homes que en dones al tenir-ne més mostres.
+  
+* El 47% dels pacients no han tingut cap tipus de dolor al pit.
+  
+* Un total de 165 pacients han patit un atac de cor i 138 no, el que representa un 55% vs. 45%         aproximadament.
+  
+* En l'atribut del colesterol observem un valor màxim de 564.0, segurament es tracti d'un valor extrem dels que s'han vist anteriorment.
+
+A banda de comentar estadísticament les dades veient-ne un resum, també podem observar visualitzacions ràpides per completar aquest primer anàlisi del joc de dades.
+
+Podem observar, per exemple, un histograma amb les diferents franges d'edat i veure que on trobem més pacients és entre els 50 i 59 anys.
+
+```{r}
+ggplot(data.frame(taula_heart), aes(x=AgeDisc, fill=AgeDisc)) + geom_bar() + theme_minimal()
+```
+
+També podem comparar quin és el sexe que més atacs de cor pateix on:
+* Sex -> 0: Dona, 1: Home
+* HeartAttack -> 0: No, 1: Atac de cor
+
+```{r}
+table(taula_heart$Sex, taula_heart$HeartAttack)
+```
+
+```{r}
+ggplot(taula_heart, aes(x=Sex, fill=HeartAttack)) + 
+  geom_bar() +
+  theme_bw() +
+  labs(y="Pacients", title="Atacs de cor en dones i homes") +
+  scale_x_discrete(labels = c("Dones", "Homes")) +
+  scale_fill_discrete(labels = c("NO Heart Attack", "Heart Attack"))
+```
+
+
+
+Amb el test de Shapiro Wilk podem revisar si les variables numèriques estan normalitzades.
+
+```{r}
+shapiro.test(taula_heart$Age)
+```
+```{r}
+shapiro.test(taula_heart$BloodPres)
+```
+```{r}
+shapiro.test(taula_heart$Cholesterol)
+```
+```{r}
+shapiro.test(taula_heart$MaxHR)
+```
+```{r}
+shapiro.test(taula_heart$OldPeak)
+```
+
+
+Amb el test de Breush-Pagan podem saber si hi ha homogeneïtat de variança entre dos grups.
+
+```{r}
+bptest(lm(Age~BloodPres, data=taula_heart))
+```
+
+* S'observa que el p-valor és inferior a 5%, per tant es rebutja la H0 i no hi ha homocedasticitat.
+
+```{r}
+bptest(lm(Age~Cholesterol, data=taula_heart))
+
+```
+
+* S'observa que el p-valor és inferior a 5%, per tant es rebutja la H0 i no hi ha homocedasticitat.
+
+```{r}
+bptest(lm(Age~MaxHR, data=taula_heart))
+
+```
+
+* S'observa que el p-valor és superior a 5%, per tant s'accepta la H0 i hi ha homocedasticitat.
+
+```{r}
+bptest(lm(BloodPres~Cholesterol, data=taula_heart))
+
+```
+
+* S'observa que el p-valor és superior a 5%, per tant s'accepta la H0 i hi ha homocedasticitat.
+
+```{r}
+bptest(lm(BloodPres~MaxHR, data=taula_heart))
+
+```
+
+* S'observa que el p-valor és superior a 5%, per tant s'accepta la H0 i hi ha homocedasticitat.
+
+```{r}
+bptest(lm(Cholesterol~MaxHR, data=taula_heart))
+
+```
+
+* S'observa que el p-valor és superior a 5%, per tant s'accepta la H0 i hi ha homocedasticitat.
+
+
+
+CONTRAST D'HIPÒTESIS: 
+
+A continuació s'aplica el model de regressió lineal que té com a objectiu aproximar la relació de dependència lineal entre una variable dependent i una (o una sèrie) de variables independents.
+
+La regressió lineal s'aplica amb la funció *lm()*.
+
+Veiem que la parella de variables *Age* i *BloodPres* obtenen un valor molt petit de R-squared, el que vol dir que aquestes dues variables estan molt poc correlacionades.
+
+```{r}
+rl1 <- lm(Age~BloodPres, data=taula_heart)
+summary(rl1)
+```
+
+
+Apliquem a continuació una matriu de correlació sobre les diferents variables numèriques del conjunt de dades per veure quines són les que estan més relacionades entre elles, fer-ne una selecció per a posteriorment construir un algoritme de regressió que ens permeti predir la variable final *HeartAttack*.
+
+```{r}
+taula_heart$Sex <- as.numeric(taula_heart$Sex)
+taula_heart$ChestPain <- as.numeric(taula_heart$ChestPain)
+taula_heart$BloodSugar <- as.numeric(taula_heart$BloodSugar)
+taula_heart$ExAngina <- as.numeric(taula_heart$ExAngina)
+taula_heart$HeartAttack <- as.numeric(taula_heart$HeartAttack)
+
+corr <- cor(select_if(taula_heart, is.numeric))
+corrplot(corr, method="number", number.cex = 0.5)
+```
+Veiem que les variables més relacionades amb *HeartAttak* són:
+*MaxHR
+*ExAngina
+*OldPeak
+*ChestPain
+
+I que les variables amb més correlació són *Slope* i *OldPeak*, que si analitzem la seva R-squared, obtenim un valor del 33%
+4
+```{r}
+rl2 <- lm(Slope~OldPeak, data=taula_heart)
+summary(rl2)
+```
+Així doncs, elaborem un algoritme de regressió logistica amb el conjunt de dades i la variable *HeartAttack* com a variable dicotòmica dependent.
+Abans però, separem les dades en dos conjunts diferents, d'entrenament i de test.
+
+```{r}
+split1<- sample(c(rep(0, 0.7 * nrow(taula_heart)), rep(1, 0.3 * nrow(taula_heart))))
+table(split1)
+```
+
+
+```{r}
+heart_train <- taula_heart[split1 == 0,]
+heart_test <- taula_heart[split1 == 1,]
+```
+
+
+Si executem l'algoritme de regressió logística amb els conjunts de test i d'entrenament, finalment acabem obtenint una AUC (Area Under Curve) de 0.89, equivalent al rendiment del model. 
+
+```{r}
+set.seed(1234)
+taula_heart$HeartAttack <- as.factor(taula_heart$HeartAttack)
+glm.model <- glm(HeartAttack~., data=taula_heart, family=binomial)
+summary(glm.model)
+glm.model <- stats::step(glm.model, direction='both') # for variable selection
+summary(glm.model)
+
+glm.pred <- predict(glm.model, newdata=heart_test)
+library(pROC)
+rocobj <- roc(heart_test$HeartAttack, glm.pred, auc=TRUE)
+rocobj$auc
+```
+
+A continuació s'aplica un random forest, algoritme de classificació, amb l'objectiu d'analitzar la bondat del model amb les dades ja dividides entre test i entrenament. Amb la funció predict() es prediu el resultat de les dades del subconjunt de test i es representen les diferents mesures de bondat del model, mitjançant la funció confusionMatrix(), especificant com a positius els casos d'atac de cor.
+
+```{r}
+taula_heart$HeartAttack <- as.factor(taula_heart$HeartAttack)
+levels(taula_heart$HeartAttack)[levels(taula_heart$HeartAttack) == 1] <- "No Heart Attack"
+levels(taula_heart$HeartAttack)[levels(taula_heart$HeartAttack) == 2] <- "Heart Attack"
+```
+
+```{r}
+split2<- sample(c(rep(0, 0.7 * nrow(taula_heart)), rep(1, 0.3 * nrow(taula_heart))))
+```
+
+```{r}
+heart_train2 <- taula_heart[split2 == 0,]
+heart_test2 <- taula_heart[split2 == 1,]
+```
+
+```{r}
+ha <- taula_heart[complete.cases(taula_heart),-1]
+train_control <- trainControl(method="cv", number=4)
+mod <- train(HeartAttack~., data=heart_train2, method="rf", trControl = train_control)
+```
+
+```{r}
+pred <- predict(mod, newdata=heart_test2)
+confusionMatrix(pred, heart_test2$HeartAttack, positive="Heart Attack")
+```
+# 5. Conclusions
+
+Generem el dataset final de sortida
+
+```{r}
+write.csv(taula_heart, "heart_final.csv")
+```
+
+
+Amb tots els anàlisis fets anteriorment, es poden presentar les següents conclusions sobre el conjunt de dades:
+
+* Les dones són més propences a patir un atac de cor
+* El colesterol és una variable que va relacionada positivament a l'edat del pacient.
+* Amb el simptoma dolor al pit (ChestPain), les probabilitats de patir un atac de cor augmenten gairebé en un  45%.
+* Haver registrat una freqüència cardíaca màxima alta, fa que augmentin les probabilitats de patir un atac de cor.
+
+
+  **Contribucions**        |    **Signatura**
+---------------------------|---------------------
+Investigació previa        |     F.V. / P.C.
+Redacció de les respostes  |     F.V. / P.C.
+Desenvolupament del codi   |     F.V. / P.C.
+Participació al vídeo      |     F.V. / P.C.
+
+
